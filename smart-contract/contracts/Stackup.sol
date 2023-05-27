@@ -20,21 +20,20 @@ contract StackUp {
         string title;
         uint8 reward;
         uint256 numberOfRewards;
-        uint256 campaignId;
     }
 
-    struct Campaign {
-        uint256 campaignId;
-        string title;
-        uint256 startTime;
-        uint256 endTime;
-    }
+    // struct Campaign {
+    //     uint256 campaignId;
+    //     string title;
+    //     uint256 startTime;
+    //     uint256 endTime;
+    // }
 
     address public admin;
     uint256 public nextQuestId;
     uint256 public nextCampaignId;
     mapping(uint256 => Quest) public quests;
-    mapping(uint256 => Campaign) public campaigns;
+    // mapping(uint256 => Campaign) public campaigns;
     mapping(uint256 => mapping(uint256 => uint256)) public questsByCampaign;
     mapping(address => mapping(uint256 => playerQuestStatus))
         public playerQuestStatuses;
@@ -58,7 +57,7 @@ contract StackUp {
     }
 
     function createQuest(
-        uint256 campaignId,
+        // uint256 campaignId,
         string calldata title_,
         uint8 reward_,
         uint256 numberOfRewards_
@@ -66,15 +65,8 @@ contract StackUp {
         require(msg.sender == admin, "Only the admin can create quests");
 
         uint256 questId = nextQuestId++;
-        quests[questId] = Quest(
-            questId,
-            0,
-            title_,
-            reward_,
-            numberOfRewards_,
-            campaignId
-        );
-        questsByCampaign[campaignId][questId] = questId;
+        quests[questId] = Quest(questId, 0, title_, reward_, numberOfRewards_);
+        // questsByCampaign[campaignId][questId] = questId;
     }
 
     function editQuest(
