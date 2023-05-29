@@ -2,7 +2,7 @@
 pragma solidity ^0.8.4;
 
 contract StackUp {
-    enum playerQuestStatus {
+    enum PlayerQuestStatus {
         NOT_JOINED,
         JOINED,
         SUBMITTED
@@ -20,99 +20,135 @@ contract StackUp {
         string title;
         uint8 reward;
         uint256 numberOfRewards;
+        mapping(address => SubmissionStatus) submissions;
     }
 
-    // struct Campaign {
-    //     uint256 campaignId;
-    //     string title;
-    //     uint256 startTime;
-    //     uint256 endTime;
-    // }
+    struct Campaign {
+        uint256 campaignId;
+        string title;
+        uint256 startTime;
+        uint256 endTime;
+        mapping(uint256 => Quest) quests;
+        uint256 nextQuestId;
+    }
 
     address public admin;
-    uint256 public nextQuestId;
     uint256 public nextCampaignId;
-    mapping(uint256 => Quest) public quests;
-    // mapping(uint256 => Campaign) public campaigns;
-    mapping(uint256 => mapping(uint256 => uint256)) public questsByCampaign;
-    mapping(address => mapping(uint256 => playerQuestStatus))
+    mapping(uint256 => Campaign) public campaigns;
+    mapping(address => mapping(uint256 => PlayerQuestStatus))
         public playerQuestStatuses;
-    mapping(address => mapping(uint256 => SubmissionStatus))
-        public submissionStatuses;
-    mapping(uint256 => uint256) public questStartTimes;
-    mapping(uint256 => uint256) public questEndTimes;
-
-    constructor() {
-        admin = msg.sender;
-    }
-
-    modifier questExists(uint256 questId) {
-        require(quests[questId].reward != 0, "Quest does not exist");
-        _;
-    }
 
     modifier onlyAdmin() {
         require(msg.sender == admin, "Only the admin can perform this action");
         _;
     }
 
+    constructor() {
+        admin = msg.sender;
+    }
+
     function createQuest(
-        // uint256 campaignId,
+        uint256 campaignId,
         string calldata title_,
         uint8 reward_,
         uint256 numberOfRewards_
-    ) external onlyAdmin {
-        require(msg.sender == admin, "Only the admin can create quests");
+    ) external onlyAdmin campaignExists(campaignId) {
+        Campaign storage campaign = campaigns[campaignId];
+        uint256 questId = campaign.nextQuestId;
+        campaign.nextQuestId++;
 
-        uint256 questId = nextQuestId++;
-        quests[questId] = Quest(questId, 0, title_, reward_, numberOfRewards_);
-        // questsByCampaign[campaignId][questId] = questId;
+        campaign.quests[questId].questId = questId;
+        campaign.quests[questId].numberOfPlayers = 0;
+        campaign.quests[questId].title = title_;
+        campaign.quests[questId].reward = reward_;
+        campaign.quests[questId].numberOfRewards = numberOfRewards_;
+    }
+
+    function createCampaign(
+        string calldata title_,
+        uint256 startTime_,
+        uint256 endTime_
+    ) external onlyAdmin {
+        Campaign storage campaign = campaigns[nextCampaignId];
+        campaign.campaignId = nextCampaignId;
+        campaign.title = title_;
+        campaign.startTime = startTime_;
+        campaign.endTime = endTime_;
+        nextCampaignId++;
+    }
+
+    function joinQuest(uint256 campaignId, uint256 questId) external {
+        Campaign storage campaign = campaigns[campaignId];
+        Quest storage quest = campaign.quests[questId];
+
+        require(quest.questId != 0, "Quest does not exist");
+        require(
+            playerQuestStatuses[msg.sender][quest.questId] ==
+                PlayerQuestStatus.NOT_JOINED,
+            "Player has already joined/submitted this quest"
+        );
+        require(
+            block.timestamp >= campaign.startTime &&
+                block.timestamp <= campaign.endTime,
+            "Campaign is not active"
+        );
+
+        playerQuestStatuses[msg.sender][quest.questId] = PlayerQuestStatus
+            .JOINED;
+        quest.numberOfPlayers++;
+    }
+
+    function submitQuest(uint256 campaignId, uint256 questId) external {
+        Campaign storage campaign = campaigns[campaignId];
+        Quest storage quest = campaign.quests[questId];
+
+        require(quest.questId != 0, "Quest does not exist");
+        require(
+            playerQuestStatuses[msg.sender][quest.questId] ==
+                PlayerQuestStatus.JOINED,
+            "Player must first join the quest"
+        );
+
+        playerQuestStatuses[msg.sender][quest.questId] = PlayerQuestStatus
+            .SUBMITTED;
+        quest.submissions[msg.sender] = SubmissionStatus.PENDING;
+    }
+
+    function deleteQuest(
+        uint256 campaignId,
+        uint256 questId
+    ) external onlyAdmin {
+        Campaign storage campaign = campaigns[campaignId];
+        Quest storage quest = campaign.quests[questId];
+
+        require(quest.questId != 0, "Quest does not exist");
+
+        delete quest.submissions[msg.sender];
+        delete campaign.quests[questId];
     }
 
     function editQuest(
+        uint256 campaignId,
         uint256 questId,
         string calldata newTitle,
         uint8 newReward,
         uint256 newNumberOfRewards
-    ) external questExists(questId) onlyAdmin {
-        Quest storage thisQuest = quests[questId];
-        thisQuest.title = newTitle;
-        thisQuest.reward = newReward;
-        thisQuest.numberOfRewards = newNumberOfRewards;
+    ) external onlyAdmin {
+        Campaign storage campaign = campaigns[campaignId];
+        Quest storage quest = campaign.quests[questId];
+
+        require(quest.questId != 0, "Quest does not exist");
+
+        quest.title = newTitle;
+        quest.reward = newReward;
+        quest.numberOfRewards = newNumberOfRewards;
     }
 
-    function deleteQuest(
-        uint256 questId
-    ) external questExists(questId) onlyAdmin {
-        delete quests[questId];
-        // You may also want to delete related data such as playerQuestStatuses and submissionStatuses
-    }
-
-    function joinQuest(uint256 questId) external questExists(questId) {
+    modifier campaignExists(uint256 campaignId) {
         require(
-            playerQuestStatuses[msg.sender][questId] ==
-                playerQuestStatus.NOT_JOINED,
-            "Player has already joined/submitted this quest"
+            campaigns[campaignId].campaignId != 0,
+            "Campaign does not exist"
         );
-
-        playerQuestStatuses[msg.sender][questId] = playerQuestStatus.JOINED;
-        quests[questId].numberOfPlayers++;
+        _;
     }
-
-    function submitQuest(uint256 questId) external questExists(questId) {
-        require(
-            playerQuestStatuses[msg.sender][questId] ==
-                playerQuestStatus.JOINED,
-            "Player must first join the quest"
-        );
-
-        playerQuestStatuses[msg.sender][questId] = playerQuestStatus.SUBMITTED;
-        submissionStatuses[msg.sender][questId] = SubmissionStatus.PENDING;
-    }
-
-    // function reviewQuestSubmission(
-    //     uint256 questId,
-    //     address player,
-    //     SubmissionStatus status
-    // ) external questExists(questId) onlyAdmin {
 }
